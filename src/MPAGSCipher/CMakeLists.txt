@@ -18,6 +18,7 @@ add_library(MPAGSCipher STATIC
   TransformChar.cpp
   VigenereCipher.hpp
   VigenereCipher.cpp
+  ExceptionClass.hpp
   )
 
 target_include_directories(MPAGSCipher

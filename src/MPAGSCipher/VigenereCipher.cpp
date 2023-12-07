@@ -1,5 +1,6 @@
 #include "VigenereCipher.hpp"
 #include "Alphabet.hpp"
+#include "ExceptionClass.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -29,9 +30,7 @@ void VigenereCipher::setKey(const std::string& key)
         // If it is we would ideally throw an exception to indicate a problem (see Day 6)
         // For now we'll just set it to be some default value and print a warning
         key_ = "VIGENEREEXAMPLE";
-        std::cerr
-            << "[warning] key provide to VigenereCipher is empty, setting it to the default: "
-            << key_ << std::endl;
+        throw InvalidInput{"key provide to VigenereCipher is empty, please re-enter a key with at least one alphabetical character"};
     }
 
     // Loop through the key

@@ -3,12 +3,15 @@
 #include "CipherType.hpp"
 #include "ProcessCommandLine.hpp"
 #include "TransformChar.hpp"
+#include "ExceptionClass.hpp"
 
 #include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
+#include <future>
+#include <thread>
 
 int main(int argc, char* argv[])
 {
@@ -18,13 +21,16 @@ int main(int argc, char* argv[])
     // Options that might be set by the command-line arguments
     ProgramSettings settings{false, false, "", "", {}, {}, CipherMode::Encrypt};
 
-    // Process command line arguments
-    const bool cmdLineStatus{processCommandLine(cmdLineArgs, settings)};
-
-    // Any failure in the argument processing means we can't continue
-    // Use a non-zero return value to indicate failure
-    if (!cmdLineStatus) {
+    try {
+        processCommandLine(cmdLineArgs, settings);
+    } catch ( const MissingArgument& e ) {
+        std::cerr << "[error] Missing argument: " << e.what() << std::endl;
         return 1;
+    } catch ( const UnknownArgument& e ) {
+        std::cerr << "[error] Unknown argument: " << e.what() << std::endl;
+        return 1;
+    } catch ( const InvalidInput& e ) {
+        std::cerr << "[error] Invalid input : " << e.what()<< std::endl;
     }
 
     // Handle help, if requested
@@ -90,14 +96,26 @@ int main(int argc, char* argv[])
         }
     }
 
+    /*
+    3. Loop over the number of threads you want to use (should be configurable but don’t worry about that now!)
+    4. For each iteration, take the next chunk from the input string
+    5. Start a new thread to run a lambda function that calls the ‘applyCipher’ function on the constructed Cipher object
+    6. Loop over the futures and wait until they are all completed
+    7. Get the results from them and assemble the final string
+    */
+
     // Request construction of the appropriate cipher(s)
     std::vector<std::unique_ptr<Cipher>> ciphers;
     std::size_t nCiphers{settings.cipherType.size()};
     ciphers.reserve(nCiphers);
     for (std::size_t iCipher{0}; iCipher < nCiphers; ++iCipher) {
-        ciphers.push_back(CipherFactory::makeCipher(
-            settings.cipherType[iCipher], settings.cipherKey[iCipher]));
-
+        try{
+            ciphers.push_back(CipherFactory::makeCipher(
+                settings.cipherType[iCipher], settings.cipherKey[iCipher]));
+        } catch(const InvalidInput& w) {
+            std::cerr << "[warning] Invalid key : " << w.what() << std::endl;
+            return 1;
+        }
         // Check that the cipher was constructed successfully
         if (!ciphers.back()) {
             std::cerr << "[error] problem constructing requested cipher"
@@ -111,10 +129,43 @@ int main(int argc, char* argv[])
         std::reverse(ciphers.begin(), ciphers.end());
     }
 
+    std::size_t numthreads{2};
+    std::size_t middle{(cipherText.size()+1)/2};
+
+    std::vector<std::string> stringsegments={cipherText.substr(0,middle),cipherText.substr(middle)};
+    std::vector< std::future< std::string > > futures;
+
     // Run the cipher(s) on the input text, specifying whether to encrypt/decrypt
     for (const auto& cipher : ciphers) {
-        cipherText = cipher->applyCipher(cipherText, settings.cipherMode);
+        //cipherText = cipher->applyCipher(cipherText, settings.cipherMode);
+        for(std::size_t n{0};n<numthreads;n++){ //loop over number of threads
+            //std::string substring{};//put chunk infomation into the substr() argument
+            std::string substringsection{stringsegments[n]};
+            std::cout << n << " " << substringsection << std::endl;
+            //create a new thread to run a lambda function which calls the applyCipher function on the constructed cipher object
+            auto fn = [&](const auto ciphercopy){
+                substringsection = ciphercopy->applyCipher(substringsection,settings.cipherMode);
+                //causes problems -- says that cipher is deleted when using & and cannot use std::move as says the same thing
+                //have not found a way to move unique pointer into lambda but no errors are appearing in vs code, only on compile
+                //not sure what to do????
+                return substringsection;};
+            futures.push_back(std::async(std::launch::async,fn,cipher));  
+            //loop over all futures and wait until all completed (i.e. loop over vector and do .join()?)
+            //get results and assemble the final string
+        }
     }
+
+    std::string intermediate{""};
+
+    for (std::size_t j{0};j<futures.size();j++){
+        std::future_status status{std::future_status::ready};
+        status = futures[j].wait_for(std::chrono::seconds(1));
+        if (status == std::future_status::ready) {
+            intermediate += futures[j].get();
+        }
+    }
+
+    cipherText = intermediate;
 
     // Output the encrypted/decrypted text to stdout/file
     if (!settings.outputFile.empty()) {
@@ -136,5 +187,6 @@ int main(int argc, char* argv[])
 
     // No requirement to return from main, but we do so for clarity
     // and for consistency with other functions
+    
     return 0;
 }

@@ -1,5 +1,6 @@
 #include "CaesarCipher.hpp"
 #include "Alphabet.hpp"
+#include "ExceptionClass.hpp"
 
 #include <iostream>
 #include <string>
@@ -8,7 +9,7 @@ CaesarCipher::CaesarCipher(const std::size_t key) : key_{key % Alphabet::size}
 {
 }
 
-CaesarCipher::CaesarCipher(const std::string& key) : key_{0}
+CaesarCipher::CaesarCipher(const std::string& key) : key_{}
 {
     // We have the key as a string, but the Caesar cipher needs an unsigned long, so we first need to convert it
     // We default to having a key of 0, i.e. no encryption, if no (valid) key was provided on the command line
@@ -24,6 +25,8 @@ CaesarCipher::CaesarCipher(const std::string& key) : key_{0}
         // handle that instead but we only cover exceptions very briefly on the
         // final day of this course - they are a very complex area of C++ that
         // could take an entire course on their own!)
+
+        /*
         for (const auto& elem : key) {
             if (!std::isdigit(elem)) {
                 std::cerr
@@ -32,8 +35,29 @@ CaesarCipher::CaesarCipher(const std::string& key) : key_{0}
                     << ") could not be successfully converted" << std::endl;
                 return;
             }
+        }*/
+        
+        try{
+            //throw std::stoul result?
+            throw std::stoul(key);
+        } catch (std::invalid_argument& x) {
+            std::cerr 
+                    << "[error] cipher key must be an unsigned long integer for Caesar cipher,\n"
+                    << "        the supplied key (" << key
+                    << ") could not be successfully converted" << std::endl;
+            return;
+        } catch (std::out_of_range& x) {
+            std::cerr 
+                    << "[error] cipher key must be less than 20 characters in length for Caesar cipher,\n"
+                    << "        the supplied key (" << key
+                    << ") is too long" << std::endl;
+            return;
+        } catch(std::size_t& x){
+            key_ = x % Alphabet::size;
         }
-        key_ = std::stoul(key) % Alphabet::size;
+
+    } else {
+        throw InvalidInput{"Please re-enter an argument for -k, see --help for inputs"};
     }
 }
 
